@@ -90,7 +90,12 @@ docker compose logs <service-name>
 
 Open http://localhost:8080. Jenkins will prompt for an initial admin password.
 
-Retrieve it with:
+> Jenkins was pre-configured with Configuration as Code (CasC),
+> the `initialAdminPassword` file may not exist. In that case, log in directly with:
+> - Username: `admin`
+> - Password: `admin`
+
+If that does not work for you, please retreive initial admin password
 
 ```bash
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
