@@ -48,7 +48,7 @@ All services (Jenkins, SonarQube, Prometheus, Grafana) are defined in `docker-co
 2. Clone your fork locally:
 
 ```bash
-git clone https://github.com/<your-username>/spring-petclinic.git
+git clone https://github.com/treytuscai/spring-petclinic.git
 cd spring-petclinic
 ```
 
