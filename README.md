@@ -107,8 +107,8 @@ Paste the password into the browser to proceed.
 
 1. On the **Customize Jenkins** screen, click **Install suggested plugins** and wait for it to finish
 2. Create your admin user when prompted
-3. Once on the Jenkins dashboard, go to **Manage Jenkins → Plugins → Available plugins**
-4. Search for and install each of the following (check the box, then click **Install**):
+3. Once on the Jenkins dashboard, go to **Manage Jenkins → Plugins → installed plugins**
+4. Search forthe following (if it's not installed, please navigate to the **available plugins** tab to install):
    - **Blue Ocean** — visual pipeline UI
    - **SonarQube Scanner** — integration with SonarQube
    - **Prometheus metrics** — exposes Jenkins metrics for Prometheus scraping
