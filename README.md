@@ -42,15 +42,11 @@ git --version
 
 All services (Jenkins, SonarQube, Prometheus, Grafana) are defined in `docker-compose.yml` and share a Docker network called `devsecops-net` so they can communicate by container name.
 
-### 0.1 Fork and Clone the Repository
-
-1. Fork this repository on GitHub (click **Fork** in the top-right)
-2. Clone your fork locally:
+### 0.1 Clone the Repository
 
 ```bash
 git clone https://github.com/treytuscai/spring-petclinic.git
 cd spring-petclinic
-git checkout feature/integration
 ```
 
 ### 0.2 Start All Services
@@ -86,51 +82,16 @@ docker compose logs <service-name>
 
 ## 1. Configure Jenkins
 
-### 1.1 Unlock Jenkins
+### 1.1 Log In
 
-Open http://localhost:8080. Jenkins will prompt for an initial admin password.
+Open http://localhost:8080. This repo uses **Configuration as Code (CasC)**, so Jenkins is pre-configured — no setup wizard or manual plugin installation is required.
 
-> Jenkins was pre-configured with Configuration as Code (CasC),
-> the `initialAdminPassword` file may not exist. In that case, log in directly with:
-> - Username: `admin`
-> - Password: `admin`
+Log in with the default credentials:
 
-If that does not work for you, please retreive initial admin password
+- **Username:** `admin`
+- **Password:** `admin`
 
-```bash
-docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
-```
-
-Paste the password into the browser to proceed.
-
-### 1.2 Install Plugins
-
-1. On the **Customize Jenkins** screen, click **Install suggested plugins** and wait for it to finish
-2. Create your admin user when prompted
-3. Once on the Jenkins dashboard, go to **Manage Jenkins → Plugins → installed plugins**
-4. Search forthe following (if it's not installed, please navigate to the **available plugins** tab to install):
-   - **Blue Ocean** — visual pipeline UI
-   - **SonarQube Scanner** — integration with SonarQube
-   - **Prometheus metrics** — exposes Jenkins metrics for Prometheus scraping
-   - **HTML Publisher** — publishes Dastardly scan reports
-5. Click **Install** and wait for all to complete
-6. Restart Jenkins when prompted
-
-### 1.3 Create the Pipeline Job
-
-1. On the Jenkins dashboard, click **New Item**
-2. Enter a job name, for example `spring-petclinic`
-3. Select **Pipeline** and click **OK**
-
-Then configure the job:
-
-1. In the **Pipeline** section, set **Definition** to `Pipeline script from SCM`
-2. Set **SCM** to `Git`
-3. In **Repository URL**, paste your fork URL (e.g. `https://github.com/<your-username>/spring-petclinic.git`)
-4. If the repo is private, click **Add → Jenkins** to add credentials (username + personal access token)
-5. In **Branches to build**, enter your branch name (e.g. `*/feature/integration`)
-6. In **Script Path**, enter: `Jenkinsfile`
-7. Click **Save**
+> 📝 **Note:** The `initialAdminPassword` file will not exist because CasC bypasses the standard setup wizard. All plugins, credentials, and the pipeline job are automatically configured on startup.
 
 ---
 
@@ -311,7 +272,7 @@ Prometheus is already started by `docker compose up` and pre-configured to scrap
 2. Click **Status → Targets**
 3. Confirm that the `jenkins` target shows **UP**
 
-If the Jenkins target shows **DOWN**, make sure the Prometheus metrics plugin is installed in Jenkins (see Section 1.2) and that Jenkins is fully started.
+If the Jenkins target shows **DOWN**, make sure Jenkins is fully started (wait 60–90 seconds) and that the Prometheus metrics plugin is active.
 
 ### 4.2 Enable the Prometheus Metrics Endpoint in Jenkins
 
@@ -422,7 +383,7 @@ Checkout → Build and Test → SonarQube Analysis → Quality Gate
 
 | Service    | URL                      | Default Credentials      |
 |------------|--------------------------|--------------------------|
-| Jenkins    | http://localhost:8080    | set during setup         |
+| Jenkins    | http://localhost:8080    | `admin` / `admin`        |
 | SonarQube  | http://localhost:9000    | `admin` / `admin`        |
 | Prometheus | http://localhost:9090    | none required            |
 | Grafana    | http://localhost:3000    | `admin` / `admin`        |
