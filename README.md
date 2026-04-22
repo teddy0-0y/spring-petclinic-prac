@@ -1,174 +1,419 @@
-# Spring PetClinic Sample Application [![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml)[![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml)
+ ---                                                                           
+  Spring PetClinic Sample Application https://github.com/spring-projects/spring-
+  petclinic/actions/workflows/maven-build.ymlhttps://github.com/spring-projects/
+  spring-petclinic/actions/workflows/gradle-build.yml                           
+                                                                                
+  Full DevSecOps Pipeline Setup
+                                                                                
+  This guide sets up a complete DevSecOps pipeline including:                   
+  - Jenkins — CI/CD automation                                                  
+  - SonarQube — static code analysis                                            
+  - Dastardly (Burp Suite) — dynamic application security testing (DAST)
+  - Prometheus — metrics collection from Jenkins                        
+  - Grafana — dashboard visualization of pipeline metrics                       
+  - Ansible — automated deployment to a production server container
+                                                                                
+  Overall flow:                                                                 
+  git push → Jenkins detects change → Build & Test → SonarQube analysis         
+  → Quality Gate check → Dastardly DAST scan → Package → Ansible deploy to prod 
+                                                                                
+  ---                                                                           
+  Prerequisites                                                                 
+                                                                                
+  Before starting, make sure the following are installed on your machine:
+                                                                                
+  - https://www.docker.com/products/docker-desktop/ (with Compose V2)           
+  - https://git-scm.com/                                                        
+                                                                                
+  Verify both are available:
+  docker --version
+  docker compose version
+  git --version                                                                 
+   
+  ---                                                                           
+  0. Clone the Repository and Start All Services
+                                                
+  All services (Jenkins, SonarQube, Prometheus, Grafana) are defined in
+  docker-compose.yml and share a Docker network called devsecops-net so they can
+   communicate by container name.
+                                                                                
+  0.1 Fork and Clone the Repository                                             
+   
+  1. Fork this repository on GitHub (click Fork in the top-right)               
+  2. Clone your fork locally:
+  git clone https://github.com/<your-username>/spring-petclinic.git             
+  cd spring-petclinic
+                                                                                
+  0.2 Start All Services
+                                                                                
+  docker compose up -d --build
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/spring-projects/spring-petclinic) [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=7517918)
+  This starts the following containers:                                         
+   
+  ┌────────────┬───────────────────────┬──────────────────────┐                 
+  │  Service   │          URL          │       Purpose        │
+  ├────────────┼───────────────────────┼──────────────────────┤                 
+  │ Jenkins    │ http://localhost:8080 │ CI/CD pipeline       │
+  ├────────────┼───────────────────────┼──────────────────────┤                 
+  │ SonarQube  │ http://localhost:9000 │ Static code analysis │
+  ├────────────┼───────────────────────┼──────────────────────┤                 
+  │ Prometheus │ http://localhost:9090 │ Metrics collection   │
+  ├────────────┼───────────────────────┼──────────────────────┤                 
+  │ Grafana    │ http://localhost:3000 │ Metrics dashboard    │
+  └────────────┴───────────────────────┴──────────────────────┘                 
+   
+  Wait about 60–90 seconds for all services to fully initialize before          
+  proceeding.     
+                                                                                
+  To check that all containers are running:
+  docker compose ps
+                   
+  All services should show running. If a service shows exited, check its logs:
+  docker compose logs <service-name>                                            
+   
+  ---                                                                           
+  1. Configure Jenkins
+                                                                                
+  1.1 Unlock Jenkins
 
-## Understanding the Spring Petclinic application with a few diagrams
+  Open http://localhost:8080. Jenkins will prompt for an initial admin password.
+   
+  Retrieve it with:                                                             
+  docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+                                                                                
+  Paste the password into the browser to proceed.
+                                                                                
+  1.2 Install Plugins
+                                                                                
+  1. On the Customize Jenkins screen, click Install suggested plugins and wait  
+  for it to finish
+  2. Create your admin user when prompted                                       
+  3. Once on the Jenkins dashboard, go to Manage Jenkins → Plugins → Available  
+  plugins                                                                       
+  4. Search for and install each of the following (check the box, then click    
+  Install):                                                                     
+    - Blue Ocean — visual pipeline UI
+    - SonarQube Scanner — integration with SonarQube                            
+    - Prometheus metrics — exposes Jenkins metrics for Prometheus scraping      
+    - HTML Publisher — publishes Dastardly scan reports                         
+  5. Click Install and wait for all to complete                                 
+  6. Restart Jenkins when prompted                                              
+                  
+  1.3 Create the Pipeline Job                                                   
+                                                                                
+  1. On the Jenkins dashboard, click New Item                                   
+  2. Enter a job name, for example spring-petclinic                             
+  3. Select Pipeline and click OK                                               
+   
+  Then configure the job:                                                       
+  1. In the Pipeline section, set Definition to Pipeline script from SCM
+  2. Set SCM to Git                                                             
+  3. In Repository URL, paste your fork URL (e.g.
+  https://github.com/<your-username>/spring-petclinic.git)                      
+  4. If the repo is private, click Add → Jenkins to add credentials (username + 
+  personal access token)                                                       
+  5. In Branches to build, enter your branch name (e.g. */feature/integration)  
+  6. In Script Path, enter:
+  Jenkinsfile                                                                   
+  7. Click Save   
+                                                                                
+  ---             
+  2. Set Up SonarQube                                                           
+   
+  2.1 Log In                                                                    
+                  
+  Open http://localhost:9000 and log in with the default credentials:
+  - Username: admin
+  - Password: admin                                                             
+                   
+  On first login, SonarQube will prompt you to change the default password. Set 
+  a new one and save it.                                                        
+   
+  2.2 Generate a Token                                                          
+                  
+  Jenkins needs a token to authenticate with SonarQube:
 
-See the presentation here:  
-[Spring Petclinic Sample Application (legacy slides)](https://speakerdeck.com/michaelisvy/spring-petclinic-sample-application?slide=20)
+  1. Click your avatar (top-right) → My Account                                 
+  2. Go to the Security tab
+  3. Under Generate Tokens, select Global Analysis Token, enter a name (e.g.    
+  petclinic-token), and click Generate                                          
+  4. Copy the token immediately — it will not be shown again                    
+                                                                                
+  2.3 Add the SonarQube Token to Jenkins Credentials                            
+                                                                                
+  1. In Jenkins, go to Manage Jenkins → Credentials → System → Global           
+  credentials → Add Credentials
+  2. Fill in:                                                                   
+    - Kind: Secret text
+    - Secret: paste your SonarQube token from Step 2.2
+    - ID: sonar-token
+    - Description: SonarQube Token                                              
+  3. Click Create
+                                                                                
+  2.4 Configure the SonarQube Server in Jenkins                                 
+   
+  1. Go to Manage Jenkins → System                                              
+  2. Scroll down to SonarQube servers and click Add SonarQube
+  3. Fill in:                                                                   
+    - Name: SonarQube
+    - Server URL: http://sonarqube:9000                                         
+    - Server authentication token: select sonar-token from the dropdown
+  4. Click Save                                                                 
+                  
+  ▎ Important: Use http://sonarqube:9000 (not localhost:9000) because Jenkins   
+  ▎ and SonarQube communicate inside the Docker network by container name.
+                                                                                
+  2.5 Set Up the Webhook for Quality Gate Callback                              
+   
+  The Quality Gate stage in the pipeline requires SonarQube to notify Jenkins   
+  when analysis completes. Without this webhook, the pipeline will wait and time
+   out after 5 minutes.                                                         
+                  
+  How it works:                                                                 
+  Jenkins triggers SonarQube analysis
+         ↓                                                                      
+  SonarQube runs the scan
+         ↓               
+  SonarQube calls Jenkins via webhook → "analysis done, here's the result"      
+         ↓                                                                
+  Jenkins marks Quality Gate as passed ✅ or failed ❌                          
+                  
+  Steps:                                                                        
+  1. In SonarQube, go to Administration → Configuration → Webhooks
+  2. Click Create and fill in:                                                  
+    - Name: Jenkins           
+    - URL: http://jenkins:8080/sonarqube-webhook/                               
+  3. Click Create                                                               
+                 
+  ▎ Important: Use http://jenkins:8080 (not localhost:8080) so SonarQube can    
+  ▎ reach Jenkins inside the Docker network.                                    
+                                                                                
+  ---                                                                           
+  3. Ansible Deployment on Jenkins
+                                  
+  A separate Docker container acts as the production server, which hosts the
+  Spring Petclinic application.                                                 
+   
+  When a developer pushes new code to the repository, Jenkins automatically     
+  triggers the pipeline, retrieves the latest code, and runs an Ansible
+  playbook. The playbook connects to the production server container through SSH
+   and deploys the updated application.
 
-> **Note:** These slides refer to a legacy, pre–Spring Boot version of Petclinic and may not reflect the current Spring Boot–based implementation.  
-> For up-to-date information, please refer to this repository and its documentation.
+  3.1: Start the Production Server Container
 
+  First, create and run a separate container that will act as the production    
+  server.
+  cd prod-server/                                                               
+                  
+  # Build the production server image
+  docker build -t petclinic-prod-server .
+                                         
+  # Run the container in detached mode                                          
+  # Runs a background Docker container named petclinic-prod, exposing SSH on 
+  port 2222 for Ansible access and the web app on port 8082 for browser access. 
+  docker run -d --name petclinic-prod -p 2222:22 -p 8082:8080                   
+  petclinic-prod-server
+  Explanation                                                                   
+  - -p 2222:22 maps port 2222 on the host to port 22 inside the container, so
+  Ansible can connect through SSH.                                              
+  - -p 8082:8080 maps port 8082 on the host to port 8080 inside the container,  
+  so the deployed web app can be accessed from a browser.                     
+  - The container name is petclinic-prod                                        
+                                        
+  If the container was already created previously, it can be started again with:
+  docker start petclinic-prod                                                   
+                                                                                
+  3.2: Install Ansible Inside the Jenkins Container                             
+                                                                                
+  Jenkins needs Ansible in order to run deployment playbooks. Since Jenkins is  
+  running inside a container, Ansible must be installed there.                  
+                                                                                
+  docker exec -u root -it jenkins bash                                          
+  # Install Ansible & sshpass in Jenkins container
+  apt-get update                                                                
+  apt-get install -y ansible sshpass
+  exit                                                                          
+  Explanation                                                                   
+  - docker exec -u root -it jenkins bash opens a shell inside the Jenkins
+  container as the root user.                                                   
+  - ansible is required to run playbooks.                                       
+  - sshpass allows password-based SSH authentication.
+                                                                                
+  3.3: Verify Jenkins Can Reach the Production Server                           
+   
+  Before running the pipeline, confirm that Jenkins can connect to the          
+  production container through SSH.
+                                                                                
+  From inside the Jenkins container, test the connection:                       
+  ssh -p 2222 <username>@host.docker.internal
+                                                                                
+  3.4: Configure the Ansible Inventory
+                                                                                
+  Create an Ansible inventory file that points to the production server         
+  container.                                                                    
+  [prod]                                                                        
+  petclinic-prod ansible_host=petclinic-prod ansible_port=22
+  ansible_user=deployer ansible_password=deployer ansible_connection=ssh
+  Explanation                                                                   
+  - ansible_host=host.docker.internal allows the Jenkins container to reach the
+  host machine                                                                  
+  - ansible_port=22 points to the mapped SSH port of the production container   
+  - ansible_user and ansible_password are the SSH login credentials inside the
+  production server container                                                   
+                                                                                
+  3.5: Create the Ansible Playbook
+                                                                                
+  The playbook contains the deployment steps executed by Jenkins.
+                                                                                
+  Responsibilities of the playbook include:                                     
+   
+  - connecting to the production container                                      
+  - copying deployment files or pulling the newest code
+  - restarting the application or container                                     
+  - confirming the service is running
+                                                                                
+  3.6: Configure the Jenkins Pipeline
+                                                                                
+  The Jenkins pipeline is set up to automatically run after each commit to run  
+  Ansible deployment playbook
+                                                                                
+  3.7: Verify Successful Deployment
 
-## Run Petclinic locally
+  After the pipeline finishes successfully, open the application in a browser:  
+  http://localhost:8082
+  If the deployment succeeded, the updated Spring Petclinic application should  
+  be visible there.
+                                                                                
+  ---
+  4. Set Up Prometheus                                                          
+                      
+  Prometheus is already started by docker compose up and pre-configured to
+  scrape Jenkins metrics via prometheus/prometheus.yml. No manual configuration 
+  is required.
+                                                                                
+  4.1 Verify Prometheus is Scraping Jenkins                                     
+   
+  1. Open http://localhost:9090                                                 
+  2. Click Status → Targets
+  3. Confirm that the jenkins target shows UP
+                                                                                
+  If the Jenkins target shows DOWN, make sure the Prometheus metrics plugin is  
+  installed in Jenkins (see Section 1.2) and that Jenkins is fully started.     
+                                                                                
+  4.2 Enable the Prometheus Metrics Endpoint in Jenkins                         
+   
+  1. In Jenkins, go to Manage Jenkins → System                                  
+  2. Scroll down to Prometheus section
+  3. Confirm the endpoint is enabled at /prometheus/ (this should already be
+  active after installing the plugin)                                           
+  4. Click Save
+                                                                                
+  You can manually verify the metrics endpoint is live:                         
+  curl http://localhost:8080/prometheus/
+  You should see a long list of metrics in plain text.                          
+                                                                                
+  ---
+  5. Set Up Grafana                                                             
+                   
+  Grafana is already started by docker compose up and provisioned with a        
+  Prometheus data source via grafana/provisioning/.                             
+   
+  5.1 Log In                                                                    
+                  
+  Open http://localhost:3000 and log in with the default credentials:
+  - Username: admin
+  - Password: admin
 
-Spring Petclinic is a [Spring Boot](https://spring.io/guides/gs/spring-boot) application built using [Maven](https://spring.io/guides/gs/maven/) or [Gradle](https://spring.io/guides/gs/gradle/).
-Java 17 or later is required for the build, and the application can run with Java 17 or newer.
-
-You first need to clone the project locally:
-
-```bash
-git clone https://github.com/spring-projects/spring-petclinic.git
-cd spring-petclinic
-```
-If you are using Maven, you can start the application on the command-line as follows:
-
-```bash
-./mvnw spring-boot:run
-```
-With Gradle, the command is as follows:
-
-```bash
-./gradlew bootRun
-```
-
-You can then access the Petclinic at <http://localhost:8080/>.
-
-<img width="1042" alt="petclinic-screenshot" src="https://cloud.githubusercontent.com/assets/838318/19727082/2aee6d6c-9b8e-11e6-81fe-e889a5ddfded.png">
-
-You can, of course, run Petclinic in your favorite IDE.
-See below for more details.
-
-## Building a Container
-
-There is no `Dockerfile` in this project. You can build a container image (if you have a docker daemon) using the Spring Boot build plugin:
-
-```bash
-./mvnw spring-boot:build-image
-```
-
-## In case you find a bug/suggested improvement for Spring Petclinic
-
-Our issue tracker is available [here](https://github.com/spring-projects/spring-petclinic/issues).
-
-## Database configuration
-
-In its default configuration, Petclinic uses an in-memory database (H2) which
-gets populated at startup with data. The h2 console is exposed at `http://localhost:8080/h2-console`,
-and it is possible to inspect the content of the database using the `jdbc:h2:mem:<uuid>` URL. The UUID is printed at startup to the console.
-
-A similar setup is provided for MySQL and PostgreSQL if a persistent database configuration is needed. Note that whenever the database type changes, the app needs to run with a different profile: `spring.profiles.active=mysql` for MySQL or `spring.profiles.active=postgres` for PostgreSQL. See the [Spring Boot documentation](https://docs.spring.io/spring-boot/how-to/properties-and-configuration.html#howto.properties-and-configuration.set-active-spring-profiles) for more detail on how to set the active profile.
-
-You can start MySQL or PostgreSQL locally with whatever installer works for your OS or use docker:
-
-```bash
-docker run -e MYSQL_USER=petclinic -e MYSQL_PASSWORD=petclinic -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=petclinic -p 3306:3306 mysql:9.6
-```
-
-or
-
-```bash
-docker run -e POSTGRES_USER=petclinic -e POSTGRES_PASSWORD=petclinic -e POSTGRES_DB=petclinic -p 5432:5432 postgres:18.3
-```
-
-Further documentation is provided for [MySQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/mysql/petclinic_db_setup_mysql.txt)
-and [PostgreSQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/postgres/petclinic_db_setup_postgres.txt).
-
-Instead of vanilla `docker` you can also use the provided `docker-compose.yml` file to start the database containers. Each one has a service named after the Spring profile:
-
-```bash
-docker compose up mysql
-```
-
-or
-
-```bash
-docker compose up postgres
-```
-
-## Test Applications
-
-At development time we recommend you use the test applications set up as `main()` methods in `PetClinicIntegrationTests` (using the default H2 database and also adding Spring Boot Devtools), `MySqlTestApplication` and `PostgresIntegrationTests`. These are set up so that you can run the apps in your IDE to get fast feedback and also run the same classes as integration tests against the respective database. The MySql integration tests use Testcontainers to start the database in a Docker container, and the Postgres tests use Docker Compose to do the same thing.
-
-## Compiling the CSS
-
-There is a `petclinic.css` in `src/main/resources/static/resources/css`. It was generated from the `petclinic.scss` source, combined with the [Bootstrap](https://getbootstrap.com/) library. If you make changes to the `scss`, or upgrade Bootstrap, you will need to re-compile the CSS resources using the Maven profile "css", i.e. `./mvnw package -P css`. There is no build profile for Gradle to compile the CSS.
-
-## Working with Petclinic in your IDE
-
-### Prerequisites
-
-The following items should be installed in your system:
-
-- Java 17 or newer (full JDK, not a JRE)
-- [Git command line tool](https://help.github.com/articles/set-up-git)
-- Your preferred IDE
-  - Eclipse with the m2e plugin. Note: when m2e is available, there is a m2 icon in `Help -> About` dialog. If m2e is
-  not there, follow the installation process [here](https://www.eclipse.org/m2e/)
-  - [Spring Tools Suite](https://spring.io/tools) (STS)
-  - [IntelliJ IDEA](https://www.jetbrains.com/idea/)
-  - [VS Code](https://code.visualstudio.com)
-
-### Steps
-
-1. On the command line run:
-
-    ```bash
-    git clone https://github.com/spring-projects/spring-petclinic.git
-    ```
-
-1. Inside Eclipse or STS:
-
-    Open the project via `File -> Import -> Maven -> Existing Maven project`, then select the root directory of the cloned repo.
-
-    Then either build on the command line `./mvnw generate-resources` or use the Eclipse launcher (right-click on project and `Run As -> Maven install`) to generate the CSS. Run the application's main method by right-clicking on it and choosing `Run As -> Java Application`.
-
-1. Inside IntelliJ IDEA:
-
-    In the main menu, choose `File -> Open` and select the Petclinic [pom.xml](pom.xml). Click on the `Open` button.
-
-    - CSS files are generated from the Maven build. You can build them on the command line `./mvnw generate-resources` or right-click on the `spring-petclinic` project then `Maven -> Generates sources and Update Folders`.
-
-    - A run configuration named `PetClinicApplication` should have been created for you if you're using a recent Ultimate version. Otherwise, run the application by right-clicking on the `PetClinicApplication` main class and choosing `Run 'PetClinicApplication'`.
-
-1. Navigate to the Petclinic
-
-    Visit [http://localhost:8080](http://localhost:8080) in your browser.
-
-## Looking for something in particular?
-
-|Spring Boot Configuration | Class or Java property files  |
-|--------------------------|---|
-|The Main Class | [PetClinicApplication](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java) |
-|Properties Files | [application.properties](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources) |
-|Caching | [CacheConfiguration](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java) |
-
-## Interesting Spring Petclinic branches and forks
-
-The Spring Petclinic "main" branch in the [spring-projects](https://github.com/spring-projects/spring-petclinic)
-GitHub org is the "canonical" implementation based on Spring Boot and Thymeleaf. There are
-[quite a few forks](https://spring-petclinic.github.io/docs/forks.html) in the GitHub org
-[spring-petclinic](https://github.com/spring-petclinic). If you are interested in using a different technology stack to implement the Pet Clinic, please join the community there.
-
-## Interaction with other open-source projects
-
-One of the best parts about working on the Spring Petclinic application is that we have the opportunity to work in direct contact with many Open Source projects. We found bugs/suggested improvements on various topics such as Spring, Spring Data, Bean Validation and even Eclipse! In many cases, they've been fixed/implemented in just a few days.
-Here is a list of them:
-
-| Name | Issue |
-|------|-------|
-| Spring JDBC: simplify usage of NamedParameterJdbcTemplate | [SPR-10256](https://github.com/spring-projects/spring-framework/issues/14889) and [SPR-10257](https://github.com/spring-projects/spring-framework/issues/14890) |
-| Bean Validation / Hibernate Validator: simplify Maven dependencies and backward compatibility |[HV-790](https://hibernate.atlassian.net/browse/HV-790) and [HV-792](https://hibernate.atlassian.net/browse/HV-792) |
-| Spring Data: provide more flexibility when working with JPQL queries | [DATAJPA-292](https://github.com/spring-projects/spring-data-jpa/issues/704) |
-
-## Contributing
-
-The [issue tracker](https://github.com/spring-projects/spring-petclinic/issues) is the preferred channel for bug reports, feature requests and submitting pull requests.
-
-For pull requests, editor preferences are available in the [editor config](.editorconfig) for easy use in common text editors. Read more and download plugins at <https://editorconfig.org>. All commits must include a __Signed-off-by__ trailer at the end of each commit message to indicate that the contributor agrees to the Developer Certificate of Origin.
-For additional details, please refer to the blog post [Hello DCO, Goodbye CLA: Simplifying Contributions to Spring](https://spring.io/blog/2025/01/06/hello-dco-goodbye-cla-simplifying-contributions-to-spring).
-
-## License
-
-The Spring PetClinic sample application is released under version 2.0 of the [Apache License](https://www.apache.org/licenses/LICENSE-2.0).
+  5.2 Verify the Prometheus Data Source                                         
+   
+  1. Go to Connections → Data sources                                           
+  2. Confirm Prometheus is listed and click on it
+  3. Scroll down and click Save & test — you should see "Data source is working"
+                                                                                
+  If Prometheus is not listed:                                                  
+  1. Click Add data source → Prometheus                                         
+  2. Set Prometheus server URL to http://prometheus:9090
+  3. Click Save & test                                  
+                                                                                
+  ▎ Important: Use http://prometheus:9090 (not localhost:9090) because Grafana 
+  ▎ communicates with Prometheus inside the Docker network.                     
+                  
+  5.3 Import the Jenkins Dashboard                                              
+                  
+  1. In Grafana, go to Dashboards → Import                                      
+  2. In the Import via grafana.com field, enter dashboard ID 9964 (Jenkins:
+  Performance and Health Overview) and click Load                               
+  3. Select your Prometheus data source from the dropdown
+  4. Click Import                                                               
+                  
+  The dashboard will now display Jenkins build durations, queue lengths,        
+  executor usage, and other pipeline metrics in real time.
+                                                                                
+  ---             
+  6. Dastardly (Burp Suite) Security Scan
+                                                                                
+  Dastardly is an automated DAST scanner from PortSwigger (the makers of Burp
+  Suite). It is already integrated into the Jenkinsfile and runs automatically  
+  as part of the pipeline after the SonarQube Quality Gate.
+                                                                                
+  No manual setup is required. The pipeline handles everything:                 
+   
+  1. Packages the application into a JAR                                        
+  2. Builds a disposable runtime Docker image
+  (docker/petclinic-runtime.Dockerfile)                                         
+  3. Starts a temporary petclinic-qa container on an isolated Docker network
+  4. Runs the Dastardly scanner against http://petclinic-qa:8080/               
+  5. Archives the scan report (dastardly-reports/dastardly-report.xml) and log
+  as Jenkins artifacts                                                          
+                  
+  6.1 View the Scan Report                                                      
+                  
+  After a pipeline run completes:                                               
+  1. Open the build in Jenkins
+  2. Click Artifacts in the left sidebar                                        
+  3. Download or view dastardly-reports/dastardly-report.xml
+                                                                                
+  ▎ Note: Dastardly findings currently do not fail the pipeline (report-only    
+  ▎ mode). The exit code is captured and logged so you can review findings      
+  ▎ without blocking deployments.                                               
+                                                                                
+  ---             
+  7. Trigger the Full Pipeline
+                                                                                
+  Once all services are configured, trigger a complete end-to-end run:
+                                                                                
+  1. Make a visible code change, for example edit the welcome message in        
+  src/main/resources/templates/welcome.html
+  2. Commit and push to your branch:                                            
+  git add .       
+  git commit -m "test: trigger pipeline with welcome message change"            
+  git push                                                          
+  3. Jenkins polls the repository approximately every minute and will           
+  automatically start a new build                                               
+  4. Open http://localhost:8080 and watch the pipeline progress in Blue Ocean   
+                                                                                
+  Expected pipeline stages:                                                     
+  Checkout → Build and Test → SonarQube Analysis → Quality Gate
+  → Package for DAST → Build QA Image → Start QA Target                         
+  → Run Dastardly Scan → Archive Results → Package → Deploy to Prod             
+   
+  5. After the pipeline completes, verify the change is live at                 
+  http://localhost:8082
+                                                                                
+  ---             
+  Service Summary
+                                                                                
+  ┌────────────┬───────────────────────┬────────────────────────┐     
+  │  Service   │          URL          │  Default Credentials   │               
+  ├────────────┼───────────────────────┼────────────────────────┤               
+  │ Jenkins    │ http://localhost:8080 │ set during setup       │
+  ├────────────┼───────────────────────┼────────────────────────┤               
+  │ SonarQube  │ http://localhost:9000 │ admin / admin          │
+  ├────────────┼───────────────────────┼────────────────────────┤               
+  │ Prometheus │ http://localhost:9090 │ none required          │
+  ├────────────┼───────────────────────┼────────────────────────┤               
+  │ Grafana    │ http://localhost:3000 │ admin / admin          │
+  ├────────────┼───────────────────────┼────────────────────────┤               
+  │ Production │ http://localhost:8082 │ (deployed application) │
+  └────────────┴───────────────────────┴────────────────────────┘               
+                  
